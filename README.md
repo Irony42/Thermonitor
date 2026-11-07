@@ -73,3 +73,7 @@ node --test "tests/web/*.test.mjs"     # ou : npm test
 - Écoute sur `localhost` uniquement, et refuse tout autre nom d'hôte (protection contre le DNS rebinding).
 - `/api/*` refuse les appels venant d'un autre site (`Sec-Fetch-Site`, `Origin`). Les actions (`POST`) exigent en plus l'en-tête `X-Thermonitor: 1`, qu'aucun autre site ne peut envoyer sans une autorisation CORS que le serveur ne donne jamais.
 - La page ne peut pas être affichée dans une iframe (`X-Frame-Options`, CSP `frame-ancestors 'none'`) et ne charge que ses propres fichiers.
+
+## Licence
+
+[MIT](LICENSE). Les capteurs sont lus avec [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0), récupéré par NuGet et intégré tel quel à l'exe publié.
