@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Thermonitor/Thermonitor.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Thermonitor.Tests/Thermonitor.Tests.csproj" />
+  </Folder>
+</Solution>

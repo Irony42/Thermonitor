@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thermonitor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23eb6834' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0Z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="brand-mark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0Z"/></svg></span>
+    Thermonitor
+  </div>
+  <div class="live" id="live" role="status"><i></i><span>Connexion…</span></div>
+  <div class="spacer"></div>
+  <div class="seg" id="win" role="group" aria-label="Fenêtre de temps"></div>
+  <div class="seg" id="rate" role="group" aria-label="Fréquence de mesure"></div>
+  <div class="seg" id="view" role="group" aria-label="Affichage"></div>
+  <button class="icon-btn" id="theme" type="button" title="Changer de thème" aria-label="Changer de thème"></button>
+</header>
+<main>
+  <div id="banners"></div>
+  <div id="content"><div class="empty"><div class="spinner"></div>Connexion à Thermonitor…</div></div>
+</main>
+<footer>
+  <span id="foot-lib">LibreHardwareMonitor</span>
+  <span id="foot-u"></span>
+  <span>Données locales, rien ne sort du PC.</span>
+</footer>
+<div class="toast" id="toast" role="status"></div>
+
+</body>
+</html>

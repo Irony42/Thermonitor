@@ -1,0 +1,10 @@
+{
+  "name": "thermonitor-web",
+  "private": true,
+  "type": "module",
+  "description": "Dev scripts for the Thermonitor page (no dependencies).",
+  "scripts": {
+    "test": "node --test \"tests/web/*.test.mjs\"",
+    "mock": "node dev/mock-server.mjs"
+  }
+}
