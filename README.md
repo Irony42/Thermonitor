@@ -1,8 +1,14 @@
 <p align="center"><img src="docs/logo.png" alt="Thermonitor" width="360"></p>
 
+<p align="center">
+  <a href="https://github.com/Irony42/Thermonitor/releases/latest"><img alt="Dernière version" src="https://img.shields.io/github/v/release/Irony42/Thermonitor?label=version&color=d42a21"></a>
+  <a href="https://github.com/Irony42/Thermonitor/releases/latest/download/Thermonitor-standalone.exe"><img alt="Télécharger" src="https://img.shields.io/badge/t%C3%A9l%C3%A9charger-Thermonitor--standalone.exe-2a78d6"></a>
+  <a href="LICENSE"><img alt="Licence MIT" src="https://img.shields.io/github/license/Irony42/Thermonitor"></a>
+</p>
+
 # Thermonitor
 
-Petit outil Windows qui affiche en direct les températures du PC (processeur et cœurs, GPU, carte mère, mémoire, SSD), avec des graphiques.
+Petit outil Windows qui affiche en direct les températures du PC (processeur et cœurs, GPU, carte mère, mémoire, SSD), avec des graphiques. **[Télécharger](#télécharger)**
 
 - Capteurs : [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (C#, .NET 10).
 - Interface : une page HTML sans dépendance. Les graphiques sont dessinés en canvas et les données arrivent en direct (Server-Sent Events).
@@ -30,21 +36,26 @@ Petit outil Windows qui affiche en direct les températures du PC (processeur et
 - **Une carte par composant** : courbes des capteurs, légende cliquable (masquer une courbe), min / max sur la fenêtre. Pour le processeur, une carte thermique cœur par cœur.
 - **Fenêtre** de 1 min à 1 h, mesure toutes les 0,5 / 1 / 2 s, thème clair ou sombre, vue tableau.
 
-## Prérequis
+## Télécharger
+
+Dernière version : **[page des releases](https://github.com/Irony42/Thermonitor/releases/latest)**. Pas d'installation, l'exe se lance tel quel.
+
+| Fichier | Taille | Pour qui |
+|---|---|---|
+| **[Thermonitor-standalone.exe](https://github.com/Irony42/Thermonitor/releases/latest/download/Thermonitor-standalone.exe)** | ~50 Mo | Le plus simple : rien d'autre à installer. |
+| [Thermonitor.exe](https://github.com/Irony42/Thermonitor/releases/latest/download/Thermonitor.exe) | ~7 Mo | Si le runtime **.NET 10 Desktop** est installé. Sinon, Windows propose de le télécharger. |
+
+Pour lire le **processeur, la carte mère et la mémoire**, installe aussi le pilote PawnIO (celui de LibreHardwareMonitor et FanControl). Sans lui, ou sans droits admin, seuls le GPU et les SSD sont lisibles :
 
 ```powershell
-winget install Microsoft.DotNet.SDK.10   # compiler
-winget install namazso.PawnIO            # pilote : capteurs CPU, carte mère, RAM
+winget install namazso.PawnIO
 ```
 
-Sans PawnIO ou sans droits admin, seuls le GPU (et parfois les SSD) sont lisibles.
+L'exe n'est pas signé : au premier lancement, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur ». Clique sur **Informations complémentaires**, puis sur **Exécuter quand même**. Les empreintes SHA-256 de chaque version sont dans les notes de la release.
 
-## Lancer
+Prérequis : Windows 10 ou 11, 64 bits. La fenêtre utilise WebView2, déjà présent dans Windows 11.
 
-```powershell
-dotnet publish src/Thermonitor -p:PublishProfile=SingleExe   # -> dist\Thermonitor.exe (un seul fichier)
-.\dist\Thermonitor.exe
-```
+## Utilisation
 
 1. Windows demande les droits administrateur (UAC). Seul le serveur de capteurs les reçoit, pas la fenêtre.
 2. La fenêtre Thermonitor s'ouvre : une fenêtre Windows native (WebView2, le moteur d'Edge intégré à Windows), sans droits admin. Sans WebView2, l'appli se rabat sur une fenêtre Chrome ou Edge en mode application.
@@ -56,7 +67,15 @@ dotnet publish src/Thermonitor -p:PublishProfile=SingleExe   # -> dist\Thermonit
 | `--no-window` | pas de fenêtre, serveur seul (`--no-browser` marche aussi) |
 | `--keep-alive` | ne s'arrête pas quand la fenêtre est fermée |
 
-Journal : `%LOCALAPPDATA%\Thermonitor\thermonitor.log`.
+Ses fichiers sont dans `%LOCALAPPDATA%\Thermonitor` : le journal (`thermonitor.log`), la position de la fenêtre et le cache de WebView2.
+
+## Compiler
+
+```powershell
+winget install Microsoft.DotNet.SDK.10
+dotnet publish src/Thermonitor -p:PublishProfile=SingleExe   # -> dist\Thermonitor.exe (léger, demande .NET 10 Desktop)
+dotnet publish src/Thermonitor -p:PublishProfile=SingleExe -p:SelfContained=true -p:EnableCompressionInSingleFile=true -p:PublishDir=dist\standalone\   # autonome
+```
 
 ## Organisation
 
