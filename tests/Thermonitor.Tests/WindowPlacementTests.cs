@@ -5,34 +5,39 @@ namespace Thermonitor.Tests;
 
 public class WindowPlacementTests
 {
-    private static readonly Rectangle Primary = new(0, 0, 3840, 2112);        // 4K minus taskbar
-    private static readonly Rectangle Secondary = new(3840, 0, 1920, 1032);
-    private static readonly Rectangle[] Both = [Primary, Secondary];
+    private static readonly Rectangle Primary = new(0, 0, 3840, 2112);           // 4K minus taskbar
+    private static readonly Rectangle Left = new(-1920, 600, 1920, 1032);        // second screen on the left
+    private static readonly Rectangle[] Both = [Primary, Left];
 
     [Fact]
-    public void First_launch_is_centred_on_the_primary_screen()
+    public void First_launch_is_centred_on_the_preferred_screen()
     {
-        var b = WindowPlacement.Fit(null, Both, Primary);
+        Assert.Equal(new WindowBounds(1200, 586, 1440, 940, false), WindowPlacement.Fit(null, Both, Primary));
+        Assert.Equal(new WindowBounds(-1680, 646, 1440, 940, false), WindowPlacement.Fit(null, Both, Left));
+    }
 
-        Assert.Equal(new WindowBounds(1200, 586, 1440, 940, false), b);
+    [Fact]
+    public void First_launch_size_follows_the_display_scale()
+    {
+        var b = WindowPlacement.Fit(null, Both, Primary, scale: 1.5);
+
+        Assert.Equal((2160, 1410), (b.Width, b.Height));
     }
 
     [Fact]
     public void A_visible_saved_position_is_restored()
     {
-        var saved = new WindowBounds(4000, 100, 1200, 800, Maximized: true);
+        var saved = new WindowBounds(-1800, 650, 1200, 800, Maximized: true);
 
         Assert.Equal(saved, WindowPlacement.Fit(saved, Both, Primary));
     }
 
     [Fact]
-    public void A_window_left_on_an_unplugged_screen_comes_back_to_the_primary()
+    public void A_window_left_on_an_unplugged_screen_comes_back_to_the_preferred_one()
     {
-        var saved = new WindowBounds(4000, 100, 1200, 800, false);
+        var saved = new WindowBounds(-1800, 650, 1200, 800, false);
 
-        var b = WindowPlacement.Fit(saved, [Primary], Primary);
-
-        Assert.Equal(new WindowBounds(1200, 586, 1440, 940, false), b);
+        Assert.Equal(new WindowBounds(1200, 586, 1440, 940, false), WindowPlacement.Fit(saved, [Primary], Primary));
     }
 
     [Fact]
@@ -40,9 +45,7 @@ public class WindowPlacementTests
     {
         var saved = new WindowBounds(3800, 100, 1200, 800, false);   // 40 px left on the primary
 
-        var b = WindowPlacement.Fit(saved, [Primary], Primary);
-
-        Assert.NotEqual(saved, b);
+        Assert.NotEqual(saved, WindowPlacement.Fit(saved, [Primary], Primary));
     }
 
     [Fact]
@@ -50,8 +53,15 @@ public class WindowPlacementTests
     {
         var b = WindowPlacement.Fit(new WindowBounds(10, 10, 200, 100, false), Both, Primary);
 
-        Assert.Equal(WindowPlacement.MinWidth, b.Width);
-        Assert.Equal(WindowPlacement.MinHeight, b.Height);
+        Assert.Equal((WindowPlacement.MinWidth, WindowPlacement.MinHeight), (b.Width, b.Height));
+    }
+
+    [Fact]
+    public void A_size_saved_on_a_big_screen_is_cut_to_a_smaller_one()
+    {
+        var b = WindowPlacement.Fit(new WindowBounds(-1900, 610, 3000, 2000, false), Both, Primary);
+
+        Assert.Equal((1920, 1032), (b.Width, b.Height));
     }
 
     [Fact]

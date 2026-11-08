@@ -21,28 +21,50 @@ public class LaunchPlanTests
     }
 
     [Fact]
-    public void Normal_launch_without_admin_starts_an_elevated_server_and_a_window()
+    public void Elevated_child_args_carry_keep_alive()
+    {
+        Assert.Equal("--server --no-window", Normal.ElevatedServerArgs);
+        Assert.Equal("--server --no-window --keep-alive", (Normal with { KeepAlive = true }).ElevatedServerArgs);
+    }
+
+    [Fact]
+    public void Normal_launch_without_admin_starts_an_elevated_server_and_a_window_here()
     {
         var plan = LaunchPlan.Decide(Normal, isAdmin: false, serverRunning: false);
 
-        Assert.Equal(new LaunchPlan(ServerPlan.Elevated, Window: true, StopServerOnClose: true), plan);
+        Assert.Equal(new LaunchPlan(ServerPlan.Elevated, WindowPlan.Here, StopServerOnClose: true), plan);
     }
 
     [Fact]
-    public void Already_admin_runs_everything_in_this_process()
+    public void Keep_alive_never_stops_the_server_when_the_window_closes()
+    {
+        var plan = LaunchPlan.Decide(Normal with { KeepAlive = true }, isAdmin: false, serverRunning: false);
+
+        Assert.Equal(new LaunchPlan(ServerPlan.Elevated, WindowPlan.Here, StopServerOnClose: false), plan);
+    }
+
+    [Fact]
+    public void Already_admin_serves_here_but_never_hosts_the_web_view()
     {
         var plan = LaunchPlan.Decide(Normal, isAdmin: true, serverRunning: false);
 
-        Assert.Equal(new LaunchPlan(ServerPlan.InProcess, Window: true, StopServerOnClose: false), plan);
+        Assert.Equal(new LaunchPlan(ServerPlan.InProcess, WindowPlan.Unelevated, StopServerOnClose: false), plan);
     }
 
     [Fact]
-    public void No_elevate_runs_a_limited_server_in_this_process()
+    public void Admin_launch_with_a_running_server_only_opens_an_unelevated_window()
+    {
+        var plan = LaunchPlan.Decide(Normal, isAdmin: true, serverRunning: true);
+
+        Assert.Equal(new LaunchPlan(ServerPlan.Reuse, WindowPlan.Unelevated, StopServerOnClose: false), plan);
+    }
+
+    [Fact]
+    public void No_elevate_runs_a_limited_server_and_the_window_here()
     {
         var plan = LaunchPlan.Decide(Normal with { NoElevate = true }, isAdmin: false, serverRunning: false);
 
-        Assert.Equal(ServerPlan.InProcess, plan.Server);
-        Assert.True(plan.Window);
+        Assert.Equal(new LaunchPlan(ServerPlan.InProcess, WindowPlan.Here, StopServerOnClose: false), plan);
     }
 
     [Fact]
@@ -50,15 +72,15 @@ public class LaunchPlanTests
     {
         var plan = LaunchPlan.Decide(Normal, isAdmin: false, serverRunning: true);
 
-        Assert.Equal(new LaunchPlan(ServerPlan.Reuse, Window: true, StopServerOnClose: false), plan);
+        Assert.Equal(new LaunchPlan(ServerPlan.Reuse, WindowPlan.Here, StopServerOnClose: false), plan);
     }
 
     [Fact]
     public void The_elevated_child_is_a_server_without_window()
     {
-        var plan = LaunchPlan.Decide(Normal with { Server = true }, isAdmin: true, serverRunning: false);
+        var plan = LaunchPlan.Decide(Normal with { Server = true, NoWindow = true }, isAdmin: true, serverRunning: false);
 
-        Assert.Equal(new LaunchPlan(ServerPlan.InProcess, Window: false, StopServerOnClose: false), plan);
+        Assert.Equal(new LaunchPlan(ServerPlan.InProcess, WindowPlan.None, StopServerOnClose: false), plan);
     }
 
     [Fact]
@@ -66,8 +88,7 @@ public class LaunchPlanTests
     {
         var plan = LaunchPlan.Decide(Normal with { Server = true }, isAdmin: true, serverRunning: true);
 
-        Assert.Equal(ServerPlan.Reuse, plan.Server);
-        Assert.False(plan.Window);
+        Assert.Equal(new LaunchPlan(ServerPlan.Reuse, WindowPlan.None, StopServerOnClose: false), plan);
     }
 
     [Fact]
@@ -78,11 +99,20 @@ public class LaunchPlanTests
         Assert.Equal(ServerPlan.InProcess, plan.Server);
     }
 
+    // As before the window: --no-window without admin still asks UAC for a full (elevated) server.
     [Fact]
-    public void No_window_runs_the_server_here_without_elevating()
+    public void No_window_without_admin_still_elevates_the_server()
     {
         var plan = LaunchPlan.Decide(Normal with { NoWindow = true }, isAdmin: false, serverRunning: false);
 
-        Assert.Equal(new LaunchPlan(ServerPlan.InProcess, Window: false, StopServerOnClose: false), plan);
+        Assert.Equal(new LaunchPlan(ServerPlan.Elevated, WindowPlan.None, StopServerOnClose: false), plan);
+    }
+
+    [Fact]
+    public void No_window_and_no_elevate_run_a_limited_server_here()
+    {
+        var plan = LaunchPlan.Decide(Normal with { NoWindow = true, NoElevate = true }, isAdmin: false, serverRunning: false);
+
+        Assert.Equal(new LaunchPlan(ServerPlan.InProcess, WindowPlan.None, StopServerOnClose: false), plan);
     }
 }

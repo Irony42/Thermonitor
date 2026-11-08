@@ -53,6 +53,11 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
     private int _clients;
     private long _lastActivity = Environment.TickCount64;
     private volatile bool _everConnected;
+    private volatile bool _quitRequested;
+    private volatile bool _stopping;
+
+    /// <summary>This server stepped down for an elevated copy ("Relancer en administrateur").</summary>
+    public bool SteppedDownForElevation { get; private set; }
 
     public async Task<bool> StartAsync(TimeSpan retryFor)
     {
@@ -112,9 +117,18 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
 
     public void Shutdown(string why)
     {
+        _stopping = true;
         if (_cts.IsCancellationRequested) return;
         Log.Write("shutdown: " + why);
         _cts.Cancel();
+    }
+
+    // The app window asked to stop: do it once no page is connected any more (a browser tab may still be).
+    private void QuitIfIdle()
+    {
+        if (!_quitRequested || Volatile.Read(ref _clients) > 0 || _stopping) return;
+        _stopping = true;   // from now on /api/ping says no, so a relaunch does not reuse a dying server
+        _ = Task.Delay(100).ContinueWith(_ => Shutdown("window closed"), TaskScheduler.Default);
     }
 
     private void Touch() => Interlocked.Exchange(ref _lastActivity, Environment.TickCount64);
@@ -167,6 +181,9 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
                 case "GET" when path == "/api/stream":
                     await StreamAsync(res);
                     break;
+                case "GET" when path == "/api/ping" && _stopping:
+                    res.StatusCode = 503;
+                    break;
                 case "GET" when path == "/api/ping":
                     await SendAsync(res, 200, "application/json", """{"app":"Thermonitor"}"""u8.ToArray());
                     break;
@@ -183,9 +200,10 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
                     await ElevateAsync(res);
                     break;
                 case "POST" when path == "/api/quit":
-                    // The app window closed: stop now rather than after the idle delay.
+                    // The app window closed: stop as soon as nothing else is connected, not after the idle delay.
+                    _quitRequested = true;
                     await SendAsync(res, 200, "application/json", """{"ok":true}"""u8.ToArray());
-                    _ = Task.Delay(100).ContinueWith(_ => Shutdown("window closed"), TaskScheduler.Default);
+                    QuitIfIdle();
                     break;
                 default:
                     res.StatusCode = 404;   // includes OPTIONS: no CORS preflight is ever approved
@@ -249,6 +267,7 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
             hub.Unsubscribe(channel.Writer);
             Touch();   // before the count drops, so the watchdog never sees 0 clients with an old timestamp
             Interlocked.Decrement(ref _clients);
+            QuitIfIdle();
         }
     }
 
@@ -300,7 +319,9 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
         // The elevated copy waits for the port, this one steps down, the page reconnects by itself.
         var ok = options.RelaunchElevated("--server --no-window --takeover" + (options.KeepAlive ? " --keep-alive" : ""));
         await SendAsync(res, 200, "application/json", ok ? """{"ok":true}"""u8.ToArray() : """{"ok":false}"""u8.ToArray());
-        if (ok) _ = Task.Delay(300).ContinueWith(_ => Shutdown("elevated instance takes over"), TaskScheduler.Default);
+        if (!ok) return;
+        SteppedDownForElevation = true;
+        _ = Task.Delay(300).ContinueWith(_ => Shutdown("elevated instance takes over"), TaskScheduler.Default);
     }
 
     private static async Task SendAsync(HttpListenerResponse res, int status, string contentType, byte[]? body)

@@ -5,7 +5,7 @@ namespace Thermonitor.App;
 /// <param name="Takeover">Wait for the port: an older instance is stepping down for this one.</param>
 /// <param name="NoWindow">No window (<c>--no-window</c>, or <c>--no-browser</c> from earlier versions).</param>
 /// <param name="NoElevate">Never ask for admin rights (limited sensors).</param>
-/// <param name="KeepAlive">The server keeps running when no window is connected.</param>
+/// <param name="KeepAlive">The server keeps running when no window is connected, or after the window closed.</param>
 internal sealed record LaunchOptions(bool Server, bool Takeover, bool NoWindow, bool NoElevate, bool KeepAlive)
 {
     public static LaunchOptions Parse(IEnumerable<string> args)
@@ -18,6 +18,9 @@ internal sealed record LaunchOptions(bool Server, bool Takeover, bool NoWindow, 
             NoElevate: f.Contains("--no-elevate"),
             KeepAlive: f.Contains("--keep-alive"));
     }
+
+    /// <summary>Arguments for the elevated server child.</summary>
+    public string ElevatedServerArgs => "--server --no-window" + (KeepAlive ? " --keep-alive" : "");
 }
 
 internal enum ServerPlan
@@ -28,23 +31,41 @@ internal enum ServerPlan
     /// <summary>Run the server inside this process (already admin, limited mode, or the elevated child itself).</summary>
     InProcess,
 
-    /// <summary>Start an elevated copy (UAC) as the server; this process only shows the window.</summary>
+    /// <summary>Start an elevated copy (UAC) as the server.</summary>
     Elevated,
+}
+
+internal enum WindowPlan
+{
+    None,
+
+    /// <summary>Show the WebView2 window in this (un-elevated) process.</summary>
+    Here,
+
+    /// <summary>
+    /// This process is elevated: a web engine must not run here, so ask the shell to start an
+    /// un-elevated copy, which finds the server running and shows the window.
+    /// </summary>
+    Unelevated,
 }
 
 /// <summary>What a launch does. Pure decision, so it can be tested without UAC prompts or windows.</summary>
 /// <param name="StopServerOnClose">Ask the server to quit when the window closes (a server this launch started elsewhere).</param>
-internal sealed record LaunchPlan(ServerPlan Server, bool Window, bool StopServerOnClose)
+internal sealed record LaunchPlan(ServerPlan Server, WindowPlan Window, bool StopServerOnClose)
 {
     public static LaunchPlan Decide(LaunchOptions o, bool isAdmin, bool serverRunning)
     {
+        var wantsWindow = !o.Server && !o.NoWindow;
+        var window = !wantsWindow ? WindowPlan.None : isAdmin ? WindowPlan.Unelevated : WindowPlan.Here;
+
         if (serverRunning && !o.Takeover)
-            return new LaunchPlan(ServerPlan.Reuse, Window: !o.Server && !o.NoWindow, StopServerOnClose: false);
-        if (o.Server || o.NoWindow)
-            return new LaunchPlan(ServerPlan.InProcess, Window: false, StopServerOnClose: false);
-        // Sensors need admin rights, the window must not have them: split unless already admin or told not to.
+            return new LaunchPlan(ServerPlan.Reuse, window, StopServerOnClose: false);
+        if (o.Server)
+            return new LaunchPlan(ServerPlan.InProcess, WindowPlan.None, StopServerOnClose: false);
         if (isAdmin || o.NoElevate)
-            return new LaunchPlan(ServerPlan.InProcess, Window: true, StopServerOnClose: false);
-        return new LaunchPlan(ServerPlan.Elevated, Window: true, StopServerOnClose: true);
+            return new LaunchPlan(ServerPlan.InProcess, window, StopServerOnClose: false);
+        // Sensors need admin rights, the window must not have them: an elevated copy serves.
+        // With --keep-alive the server outlives the window; without a window this process just exits.
+        return new LaunchPlan(ServerPlan.Elevated, window, StopServerOnClose: window == WindowPlan.Here && !o.KeepAlive);
     }
 }

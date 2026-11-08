@@ -6,14 +6,13 @@ namespace Thermonitor;
 internal static class Program
 {
     private const string Url = "http://localhost:8787/";
-    private const string SingleWindowMutex = @"Local\Thermonitor.Window";
 
     // Flags:
     //   --server      run only the sensor server (the elevated child)
     //   --takeover    wait for the port to free up (an older instance is stepping down)
     //   --no-window   no window (alias: --no-browser)
     //   --no-elevate  never ask for admin rights (limited sensors)
-    //   --keep-alive  the server does not quit when the last window closes
+    //   --keep-alive  the server keeps running when the window closes
     [STAThread]
     private static int Main(string[] args)
     {
@@ -21,11 +20,11 @@ internal static class Program
         Log.Init();
         Log.Write($"start args=[{string.Join(' ', args)}] admin={Elevation.IsAdmin}");
 
-        // One window at a time: a second launch (Start menu, pinned icon) brings the first one back.
-        var wantsWindow = !options.Server && !options.NoWindow;
-        var firstWindow = true;
-        using var single = wantsWindow ? new Mutex(initiallyOwned: true, SingleWindowMutex, out firstWindow) : null;
-        if (wantsWindow && !firstWindow && Win32.FocusOtherInstance()) return 0;
+        // One window at a time. Taken before looking at the server: the previous window's process may
+        // still be stopping it.
+        var windowHere = !options.Server && !options.NoWindow && !Elevation.IsAdmin;
+        using var windowLock = windowHere ? WindowLock.Acquire(TimeSpan.FromSeconds(60)) : null;
+        if (windowHere && windowLock is null) return 0;
 
         var running = !options.Takeover && Sync(() => LocalInstance.PingAsync(Url));
         var plan = LaunchPlan.Decide(options, Elevation.IsAdmin, running);
@@ -36,8 +35,7 @@ internal static class Program
         switch (plan.Server)
         {
             case ServerPlan.Elevated:
-                var childArgs = "--server --no-window" + (options.KeepAlive ? " --keep-alive" : "");
-                if (Elevation.TryRelaunch(childArgs) && Sync(() => LocalInstance.WaitForAsync(Url, TimeSpan.FromSeconds(30))))
+                if (Elevation.TryRelaunch(options.ElevatedServerArgs) && Sync(() => LocalInstance.WaitForAsync(Url, TimeSpan.FromSeconds(30))))
                 {
                     stopRemote = plan.StopServerOnClose;
                     break;
@@ -54,29 +52,48 @@ internal static class Program
                 break;
         }
 
-        if (!plan.Window)
+        switch (plan.Window)
         {
-            local?.Completion.GetAwaiter().GetResult();
-        }
-        else if (WebViewLoader.TryPrepare())
-        {
-            ApplicationConfiguration.Initialize();
-            Application.Run(new MainWindow(Url));
-            // Closed: stop the elevated server now instead of waiting for its idle timeout. Also when the
-            // in-process server already stepped down for an elevated copy ("Relancer en administrateur").
-            if (stopRemote || local?.Completion.IsCompleted == true) Sync(() => LocalInstance.RequestQuitAsync(Url));
-        }
-        else
-        {
-            // No usable WebView2: fall back to a Chrome / Edge app window, the server quits on its own.
-            Log.Write("opening the browser instead of the app window");
-            Browser.Open(Url, Elevation.IsAdmin);
-            local?.Completion.GetAwaiter().GetResult();
+            case WindowPlan.None:
+                local?.Completion.GetAwaiter().GetResult();   // a server-only process lives as long as its server
+                break;
+
+            case WindowPlan.Unelevated:
+                Elevation.StartUnelevated(Environment.ProcessPath!);
+                local?.Completion.GetAwaiter().GetResult();
+                break;
+
+            case WindowPlan.Here when !ShowWindow():
+                // WebView2 missing or failing: a Chrome / Edge app window instead; the server quits on its own.
+                Browser.Open(Url, elevated: false);
+                local?.Completion.GetAwaiter().GetResult();
+                break;
+
+            case WindowPlan.Here:
+                if (options.KeepAlive)
+                {
+                    local?.Completion.GetAwaiter().GetResult();   // the server outlives the window
+                    break;
+                }
+                // Stop the server this launch started elsewhere, instead of waiting for its idle timeout:
+                // the elevated child, or the elevated copy that took over from the in-process server.
+                if (stopRemote || local?.SteppedDown == true) Sync(() => LocalInstance.RequestQuitAsync(Url));
+                break;
         }
 
         local?.Dispose();
         Log.Write("exit");
         return 0;
+    }
+
+    /// <summary>Runs the window until it closes. False when WebView2 could not show the page.</summary>
+    private static bool ShowWindow()
+    {
+        if (!WebViewLoader.TryPrepare()) return false;
+        ApplicationConfiguration.Initialize();
+        using var window = new MainWindow(Url);
+        Application.Run(window);
+        return !window.WebViewFailed;
     }
 
     // Main is a plain STA thread for WinForms: run async work on the thread pool, never on a UI context.

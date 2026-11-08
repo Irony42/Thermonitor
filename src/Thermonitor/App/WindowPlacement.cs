@@ -6,36 +6,48 @@ namespace Thermonitor.App;
 internal sealed record WindowBounds(int X, int Y, int Width, int Height, bool Maximized);
 
 /// <summary>Remembers where the window was, and never restores it off-screen (unplugged monitor...).</summary>
+/// <remarks>The process is per-monitor DPI aware: everything is in physical pixels, sizes are scaled by the monitor's DPI.</remarks>
 internal static class WindowPlacement
 {
-    public const int MinWidth = 720;
+    public const int MinWidth = 720;     // at 100 % scale
     public const int MinHeight = 480;
     private const int DefaultWidth = 1440;
     private const int DefaultHeight = 940;
     private const int TitleBarHeight = 32;
     private const int MinVisible = 120;   // px of title bar that must stay grabbable
 
-    public static WindowBounds Fit(WindowBounds? saved, IReadOnlyList<Rectangle> workAreas, Rectangle primary)
+    /// <param name="preferred">Work area to centre a new window in (where the user launched it from).</param>
+    /// <param name="scale">Display scale of that area (1.0 = 100 %, 2.0 = 200 %).</param>
+    public static WindowBounds Fit(WindowBounds? saved, IReadOnlyList<Rectangle> workAreas, Rectangle preferred, double scale = 1.0)
     {
+        var minW = (int)Math.Round(MinWidth * scale);
+        var minH = (int)Math.Round(MinHeight * scale);
+
         if (saved is not null)
         {
-            var w = Math.Max(MinWidth, saved.Width);
-            var h = Math.Max(MinHeight, saved.Height);
-            var titleBar = new Rectangle(saved.X, saved.Y, w, TitleBarHeight);
-            foreach (var area in workAreas)
+            // The screen holding most of the title bar is the one the window is "on".
+            var titleBar = new Rectangle(saved.X, saved.Y, Math.Max(minW, saved.Width), TitleBarHeight);
+            var best = workAreas
+                .Select(area => (area, visible: Rectangle.Intersect(area, titleBar)))
+                .Where(x => x.visible.Width >= MinVisible && x.visible.Height >= TitleBarHeight / 2)
+                .OrderByDescending(x => x.visible.Width)
+                .Select(x => (Rectangle?)x.area)
+                .FirstOrDefault();
+            if (best is { } area)
             {
-                var visible = Rectangle.Intersect(area, titleBar);
-                if (visible.Width >= MinVisible && visible.Height >= TitleBarHeight / 2)
-                    return saved with { Width = w, Height = h };
+                // Never bigger than that screen (saved on a larger monitor), never below the minimum.
+                var w = Math.Clamp(saved.Width, Math.Min(minW, area.Width), area.Width);
+                var h = Math.Clamp(saved.Height, Math.Min(minH, area.Height), area.Height);
+                return saved with { Width = w, Height = h };
             }
         }
 
-        // Default: centred on the primary screen, shrunk if the screen is small.
-        var width = Math.Max(MinWidth, Math.Min(DefaultWidth, primary.Width - 40));
-        var height = Math.Max(MinHeight, Math.Min(DefaultHeight, primary.Height - 40));
+        // Default: centred on the preferred screen, shrunk if that screen is small.
+        var width = Math.Max(Math.Min(minW, preferred.Width), Math.Min((int)Math.Round(DefaultWidth * scale), preferred.Width - 40));
+        var height = Math.Max(Math.Min(minH, preferred.Height), Math.Min((int)Math.Round(DefaultHeight * scale), preferred.Height - 40));
         return new WindowBounds(
-            primary.X + (primary.Width - width) / 2,
-            primary.Y + (primary.Height - height) / 2,
+            preferred.X + (preferred.Width - width) / 2,
+            preferred.Y + (preferred.Height - height) / 2,
             width, height, Maximized: false);
     }
 

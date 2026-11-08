@@ -9,6 +9,8 @@ internal static class Win32
 {
     private const int DwmUseImmersiveDarkMode = 20;
     private const int SwRestore = 9;
+    private const uint MonitorDefaultToNearest = 2;
+    private const int MdtEffectiveDpi = 0;
 
     /// <summary>Dark or light title bar (Windows 10 2004+ / 11).</summary>
     public static void SetDarkTitleBar(IntPtr hwnd, bool dark)
@@ -24,7 +26,14 @@ internal static class Win32
         return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
     }
 
-    /// <summary>Brings the window of another running Thermonitor to the front. False if there is none.</summary>
+    /// <summary>Display scale of the monitor at this point (1.0 = 100 %).</summary>
+    public static double ScaleAt(Point p)
+    {
+        var monitor = MonitorFromPoint(p, MonitorDefaultToNearest);
+        return GetDpiForMonitor(monitor, MdtEffectiveDpi, out var dpiX, out _) == 0 && dpiX > 0 ? dpiX / 96.0 : 1.0;
+    }
+
+    /// <summary>Brings the window of another running Thermonitor to the front. False if there is none (yet).</summary>
     public static bool FocusOtherInstance()
     {
         var me = Environment.ProcessId;
@@ -33,7 +42,7 @@ internal static class Win32
             using (p)
             {
                 if (p.Id == me || p.MainWindowHandle == IntPtr.Zero) continue;
-                _ = ShowWindow(p.MainWindowHandle, SwRestore);
+                if (IsIconic(p.MainWindowHandle)) _ = ShowWindow(p.MainWindowHandle, SwRestore);   // keeps a maximized window maximized
                 _ = SetForegroundWindow(p.MainWindowHandle);
                 return true;
             }
@@ -51,4 +60,14 @@ internal static class Win32
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(Point pt, uint flags);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr monitor, int dpiType, out uint dpiX, out uint dpiY);
 }

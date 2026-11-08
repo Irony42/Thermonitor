@@ -8,7 +8,8 @@ namespace Thermonitor.App;
 
 /// <summary>
 /// The Thermonitor window: a native window (own taskbar button and icon) showing the page the
-/// local server serves, through WebView2 (the Edge engine built into Windows). Never elevated.
+/// local server serves, through WebView2 (the Edge engine built into Windows). Never elevated:
+/// an elevated launch hands the window to an un-elevated copy (see <see cref="WindowPlan.Unelevated"/>).
 /// </summary>
 internal sealed class MainWindow : Form
 {
@@ -23,17 +24,28 @@ internal sealed class MainWindow : Form
         Text = "Thermonitor";
         Icon = LoadIcon();
         BackColor = PageDark;
-        MinimumSize = new Size(WindowPlacement.MinWidth, WindowPlacement.MinHeight);
 
         // First launch: centred on the screen the user clicked from (where the mouse is).
+        var target = Screen.FromPoint(Cursor.Position).WorkingArea;
+        var scale = Win32.ScaleAt(new Point(target.X + target.Width / 2, target.Y + target.Height / 2));
         var screens = Screen.AllScreens.Select(s => s.WorkingArea).ToList();
-        _place = WindowPlacement.Fit(WindowPlacement.Load(AppPaths.WindowFile), screens, Screen.FromPoint(Cursor.Position).WorkingArea);
+        _place = WindowPlacement.Fit(WindowPlacement.Load(AppPaths.WindowFile), screens, target, scale);
         StartPosition = FormStartPosition.Manual;
         Bounds = new Rectangle(_place.X, _place.Y, _place.Width, _place.Height);
         if (_place.Maximized) WindowState = FormWindowState.Maximized;
 
         _web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = PageDark };
         Controls.Add(_web);
+    }
+
+    /// <summary>WebView2 could not show the page: the caller opens the browser instead.</summary>
+    public bool WebViewFailed { get; private set; }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Win32.SetDarkTitleBar(Handle, Win32.AppsUseDarkTheme());
+        MinimumSize = new Size(WindowPlacement.MinWidth * DeviceDpi / 96, WindowPlacement.MinHeight * DeviceDpi / 96);
     }
 
     // Windows may move a new window to the monitor the launch came from: put it where it belongs.
@@ -45,47 +57,60 @@ internal sealed class MainWindow : Form
         Bounds = new Rectangle(_place.X, _place.Y, _place.Width, _place.Height);
     }
 
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        Win32.SetDarkTitleBar(Handle, Win32.AppsUseDarkTheme());
-    }
-
     protected override async void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
         try
         {
             var env = await CoreWebView2Environment.CreateAsync(userDataFolder: AppPaths.WebViewData);
+            if (IsDisposed) return;   // closed while WebView2 was starting
             await _web.EnsureCoreWebView2Async(env);
+            if (IsDisposed) return;
             var core = _web.CoreWebView2;
             core.Settings.AreDevToolsEnabled = Debugger.IsAttached;
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
             core.NewWindowRequested += (_, a) => a.Handled = true;    // the page never opens pop-ups
-            core.NavigationStarting += (_, a) =>                       // stay on the local server
-            {
-                if (!Uri.TryCreate(a.Uri, UriKind.Absolute, out var target) || target.Authority != _url.Authority) a.Cancel = true;
-            };
+            core.NavigationStarting += (_, a) => a.Cancel = !IsOurs(a.Uri);   // stay on the local server
             core.WebMessageReceived += OnPageMessage;
+            core.ProcessFailed += OnProcessFailed;
             _web.Source = _url;
+        }
+        catch (Exception ex) when (!IsDisposed)
+        {
+            Log.Write("webview2 failed to start: " + ex);
+            WebViewFailed = true;   // Program falls back to the browser window
+            Close();
         }
         catch (Exception ex)
         {
-            Log.Write("webview2: " + ex);
-            Dialog.Error("Thermonitor", "La fenêtre n'a pas pu afficher la page (WebView2).\n\n" + ex.Message);
-            Close();
+            Log.Write("webview2 start interrupted by closing: " + ex.Message);
         }
     }
 
-    // The page reports its theme, so the title bar follows the in-page light/dark switch.
+    private bool IsOurs(string? uri) =>
+        Uri.TryCreate(uri, UriKind.Absolute, out var u)
+        && Uri.Compare(u, _url, UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) == 0;
+
+    // A crashed or hung page process would leave a dead window: reload it.
+    private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+    {
+        Log.Write($"webview2 process failed: {e.ProcessFailedKind} ({e.Reason})");
+        if (IsDisposed) return;
+        if (e.ProcessFailedKind is CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
+            _web.Reload();
+    }
+
+    // The page reports its theme ({ "theme": "dark" | "light" }), so the title bar follows the in-page switch.
     private void OnPageMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (!Uri.TryCreate(e.Source, UriKind.Absolute, out var from) || from.Authority != _url.Authority) return;
+        if (!IsOurs(e.Source)) return;
         try
         {
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
-            if (doc.RootElement.TryGetProperty("theme", out var theme))
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("theme", out var theme)
+                && theme.ValueKind == JsonValueKind.String)
                 Win32.SetDarkTitleBar(Handle, theme.GetString() == "dark");
         }
         catch (JsonException)
