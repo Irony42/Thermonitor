@@ -8,20 +8,37 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>Thermonitor</AssemblyName>
     <RootNamespace>Thermonitor</RootNamespace>
-    <Version>1.1.0</Version>
+    <Version>1.0.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationIcon>thermonitor.ico</ApplicationIcon>
+    <!-- The app window (WinForms + WebView2) shows the same page the server serves. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" PrivateAssets="all" GeneratePathProperty="true" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- The whole page is embedded: the exe is the only file to ship. -->
     <EmbeddedResource Include="wwwroot\**\*" LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Multi-size window icon (the exe icon only gives Windows a 32 px one). -->
+    <EmbeddedResource Include="thermonitor.ico" LogicalName="thermonitor.ico" />
+    <!-- WebView2 looks for its native loader next to its own assembly, which a single-file exe does not
+         have: the loader is embedded and extracted at start-up (see App/WebViewLoader.cs). -->
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll" LogicalName="WebView2Loader.dll" />
     <InternalsVisibleTo Include="Thermonitor.Tests" />
   </ItemGroup>
+
+  <!-- The WebView2 package also references its WPF control, which drags in a conflicting WindowsBase.
+       Only the WinForms control is used. -->
+  <Target Name="DropWebView2Wpf" AfterTargets="ResolvePackageAssets" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

@@ -1,7 +1,5 @@
-using Thermonitor.Feed;
+using Thermonitor.App;
 using Thermonitor.Platform;
-using Thermonitor.Sensors;
-using Thermonitor.Web;
 
 namespace Thermonitor;
 
@@ -10,56 +8,94 @@ internal static class Program
     private const string Url = "http://localhost:8787/";
 
     // Flags:
-    //   --server      run the sensor server (set on the elevated child)
+    //   --server      run only the sensor server (the elevated child)
     //   --takeover    wait for the port to free up (an older instance is stepping down)
-    //   --no-browser  do not open a window
+    //   --no-window   no window (alias: --no-browser)
     //   --no-elevate  never ask for admin rights (limited sensors)
-    //   --keep-alive  do not quit when the last window closes
-    private static async Task<int> Main(string[] args)
+    //   --keep-alive  the server keeps running when the window closes
+    [STAThread]
+    private static int Main(string[] args)
     {
-        var flags = new HashSet<string>(args, StringComparer.OrdinalIgnoreCase);
-        var asServer = flags.Contains("--server");
-        var takeover = flags.Contains("--takeover");
-        var openBrowser = !flags.Contains("--no-browser");
-        var keepAlive = flags.Contains("--keep-alive");
-
+        var options = LaunchOptions.Parse(args);
         Log.Init();
         Log.Write($"start args=[{string.Join(' ', args)}] admin={Elevation.IsAdmin}");
 
-        // Already running: just show it.
-        if (!takeover && await LocalInstance.PingAsync(Url))
-        {
-            if (openBrowser) Browser.Open(Url, Elevation.IsAdmin);
-            return 0;
-        }
+        // One window at a time. Taken before looking at the server: the previous window's process may
+        // still be stopping it.
+        var windowHere = !options.Server && !options.NoWindow && !Elevation.IsAdmin;
+        using var windowLock = windowHere ? WindowLock.Acquire(TimeSpan.FromSeconds(60)) : null;
+        if (windowHere && windowLock is null) return 0;
 
-        // Sensors need admin rights: start an elevated server, keep the window un-elevated.
-        if (!asServer && !Elevation.IsAdmin && !flags.Contains("--no-elevate"))
+        var running = !options.Takeover && Sync(() => LocalInstance.PingAsync(Url));
+        var plan = LaunchPlan.Decide(options, Elevation.IsAdmin, running);
+        Log.Write($"plan: {plan}");
+
+        HostedServer? local = null;
+        var stopRemote = false;
+        switch (plan.Server)
         {
-            if (Elevation.TryRelaunch("--server --no-browser" + (keepAlive ? " --keep-alive" : "")))
-            {
-                if (await LocalInstance.WaitForAsync(Url, TimeSpan.FromSeconds(30)))
+            case ServerPlan.Elevated:
+                if (Elevation.TryRelaunch(options.ElevatedServerArgs) && Sync(() => LocalInstance.WaitForAsync(Url, TimeSpan.FromSeconds(30))))
                 {
-                    if (openBrowser) Browser.Open(Url, elevated: false);
-                    return 0;
+                    stopRemote = plan.StopServerOnClose;
+                    break;
                 }
-                Log.Write("elevated server never answered, falling back to limited mode");
-            }
+                Log.Write("no elevated server, falling back to limited mode");
+                goto case ServerPlan.InProcess;
+            case ServerPlan.InProcess:
+                local = Sync(() => HostedServer.StartAsync(Url, options));
+                if (local is null)
+                {
+                    Dialog.Error("Thermonitor", $"Le port {new Uri(Url).Port} est déjà utilisé par une autre application.\n\nFerme-la puis relance Thermonitor.");
+                    return 1;
+                }
+                break;
         }
 
-        using var hub = new SensorHub(new LhmSensorSource(), Elevation.IsAdmin);
-        var server = new WebServer(hub, new WebServerOptions(
-            Url, keepAlive, DevRoot: Environment.GetEnvironmentVariable("THERMONITOR_WWW")));
-        if (!await server.StartAsync(takeover ? TimeSpan.FromSeconds(20) : TimeSpan.FromSeconds(2)))
+        switch (plan.Window)
         {
-            Dialog.Error("Thermonitor", $"Le port {new Uri(Url).Port} est déjà utilisé par une autre application.\n\nFerme-la puis relance Thermonitor.");
-            return 1;
+            case WindowPlan.None:
+                local?.Completion.GetAwaiter().GetResult();   // a server-only process lives as long as its server
+                break;
+
+            case WindowPlan.Unelevated:
+                Elevation.StartUnelevated(Environment.ProcessPath!);
+                local?.Completion.GetAwaiter().GetResult();
+                break;
+
+            case WindowPlan.Here when !ShowWindow():
+                // WebView2 missing or failing: a Chrome / Edge app window instead; the server quits on its own.
+                Browser.Open(Url, elevated: false);
+                local?.Completion.GetAwaiter().GetResult();
+                break;
+
+            case WindowPlan.Here:
+                if (options.KeepAlive)
+                {
+                    local?.Completion.GetAwaiter().GetResult();   // the server outlives the window
+                    break;
+                }
+                // Stop the server this launch started elsewhere, instead of waiting for its idle timeout:
+                // the elevated child, or the elevated copy that took over from the in-process server.
+                if (stopRemote || local?.SteppedDown == true) Sync(() => LocalInstance.RequestQuitAsync(Url));
+                break;
         }
 
-        hub.Start();
-        if (openBrowser) Browser.Open(Url, Elevation.IsAdmin);
-        await server.RunAsync();
+        local?.Dispose();
         Log.Write("exit");
         return 0;
     }
+
+    /// <summary>Runs the window until it closes. False when WebView2 could not show the page.</summary>
+    private static bool ShowWindow()
+    {
+        if (!WebViewLoader.TryPrepare()) return false;
+        ApplicationConfiguration.Initialize();
+        using var window = new MainWindow(Url);
+        Application.Run(window);
+        return !window.WebViewFailed;
+    }
+
+    // Main is a plain STA thread for WinForms: run async work on the thread pool, never on a UI context.
+    private static T Sync<T>(Func<Task<T>> work) => Task.Run(work).GetAwaiter().GetResult();
 }

@@ -46,14 +46,14 @@ dotnet publish src/Thermonitor -p:PublishProfile=SingleExe   # -> dist\Thermonit
 .\dist\Thermonitor.exe
 ```
 
-1. Windows demande les droits administrateur (UAC). Seul le serveur de capteurs les reçoit, pas le navigateur.
-2. Une fenêtre s'ouvre en mode application (Chrome ou Edge, sans onglets).
-3. Quand la fenêtre est fermée, le programme s'arrête tout seul au bout de 20 s.
+1. Windows demande les droits administrateur (UAC). Seul le serveur de capteurs les reçoit, pas la fenêtre.
+2. La fenêtre Thermonitor s'ouvre : une fenêtre Windows native (WebView2, le moteur d'Edge intégré à Windows), sans droits admin. Sans WebView2, l'appli se rabat sur une fenêtre Chrome ou Edge en mode application.
+3. Quand la fenêtre est fermée, le serveur s'arrête aussitôt. Relancer Thermonitor alors qu'il est ouvert ramène simplement la fenêtre au premier plan. La position et la taille de la fenêtre sont mémorisées.
 
 | Option | Effet |
 |---|---|
 | `--no-elevate` | ne demande pas les droits admin (mode limité) |
-| `--no-browser` | n'ouvre pas de fenêtre |
+| `--no-window` | pas de fenêtre, serveur seul (`--no-browser` marche aussi) |
 | `--keep-alive` | ne s'arrête pas quand la fenêtre est fermée |
 
 Journal : `%LOCALAPPDATA%\Thermonitor\thermonitor.log`.
@@ -62,7 +62,8 @@ Journal : `%LOCALAPPDATA%\Thermonitor\thermonitor.log`.
 
 ```
 src/Thermonitor/
-  Program.cs            lancement : élévation UAC, fenêtre, serveur
+  Program.cs            lancement : élévation UAC, serveur, fenêtre
+  App/                  la fenêtre (WinForms + WebView2) et le plan de lancement (testé)
   Platform/             Windows : log, élévation, navigateur, instance déjà lancée
   Sensors/              lecture des capteurs (LibreHardwareMonitor) et filtrage des valeurs
   Feed/                 historique d'une heure, format des messages, diffusion aux pages

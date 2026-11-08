@@ -293,6 +293,85 @@ public sealed class WebServerTests : IAsyncLifetime
         Assert.Equal(0, calls);
     }
 
+    [Fact]
+    public async Task Closing_the_window_stops_the_server_at_once()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true });
+
+        var res = await other.Http.SendAsync(Action("/api/quit", null));
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        await other.Run.WaitAsync(TimeSpan.FromSeconds(5));   // even with keep-alive
+    }
+
+    [Fact]
+    public async Task Quit_waits_for_other_pages_to_leave()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true, HeartbeatEvery = TimeSpan.FromMilliseconds(100) });
+        var tab = await other.Http.GetAsync("/api/stream", HttpCompletionOption.ResponseHeadersRead);   // e.g. a browser tab
+        var stream = await tab.Content.ReadAsStreamAsync();
+        await ReadUntilAsync(stream, "event: snapshot", "}\n\n");
+
+        await other.Http.SendAsync(Action("/api/quit", null));
+        await Task.Delay(500);
+        Assert.False(other.Run.IsCompleted, "a page is still connected");
+
+        await stream.DisposeAsync();
+        tab.Dispose();
+        await other.Run.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task A_stopping_server_no_longer_answers_ping()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true, HeartbeatEvery = TimeSpan.FromMilliseconds(100) });
+        var tab = await other.Http.GetAsync("/api/stream", HttpCompletionOption.ResponseHeadersRead);
+        var stream = await tab.Content.ReadAsStreamAsync();
+        await ReadUntilAsync(stream, "event: snapshot", "}\n\n");
+        Assert.True(await Thermonitor.Platform.LocalInstance.PingAsync(other.Http.BaseAddress!.ToString()));
+
+        await other.Http.SendAsync(Action("/api/quit", null));
+        await stream.DisposeAsync();
+        tab.Dispose();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (await Thermonitor.Platform.LocalInstance.PingAsync(other.Http.BaseAddress!.ToString()))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "ping still answers while stopping");
+            await Task.Delay(20);
+        }
+    }
+
+    [Fact]
+    public async Task Elevation_hand_over_is_reported()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true, IsAdmin = false, RelaunchElevated = _ => true });
+
+        await other.Http.SendAsync(Action("/api/elevate", null));
+
+        Assert.True(other.Server.SteppedDownForElevation);
+    }
+
+    [Fact]
+    public async Task Quit_needs_the_custom_header()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true });
+
+        var res = await other.Http.SendAsync(Action("/api/quit", null, withHeader: false));
+
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+        await Task.Delay(400);
+        Assert.False(other.Run.IsCompleted);
+    }
+
+    [Fact]
+    public async Task RequestQuitAsync_is_what_the_window_uses()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true });
+
+        Assert.True(await Thermonitor.Platform.LocalInstance.RequestQuitAsync(other.Http.BaseAddress!.ToString()));
+        await other.Run.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     /// <summary>A second server with its own options (the shared one is keep-alive and never elevates).</summary>
     private static async Task<OtherServer> OtherServerAsync(Func<WebServerOptions, WebServerOptions> configure)
     {

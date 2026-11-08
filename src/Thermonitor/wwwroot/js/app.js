@@ -392,6 +392,8 @@ function applyTheme() {
   else delete document.documentElement.dataset.theme;
   readColors();
   $('#theme').innerHTML = svg(isDark() ? 'sun' : 'moon');
+  // Inside the Thermonitor window (WebView2), the title bar follows the page theme.
+  window.chrome?.webview?.postMessage({ theme: isDark() ? 'dark' : 'light' });
   requestRender();
 }
 $('#theme').addEventListener('click', () => {

@@ -33,4 +33,20 @@ internal static class Elevation
             return false;
         }
     }
+
+    /// <summary>
+    /// Starts <paramref name="exe"/> without admin rights, from an elevated process: explorer.exe hands the
+    /// launch to the user's (un-elevated) shell. Used so the web view never runs elevated.
+    /// </summary>
+    public static void StartUnelevated(string exe)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{exe}\"") { UseShellExecute = false });
+        }
+        catch (Exception ex)
+        {
+            Log.Write("cannot start the un-elevated window: " + ex.Message);
+        }
+    }
 }
