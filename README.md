@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" alt="Thermonitor" width="360"></p>
+
 # Thermonitor
 
 Petit outil Windows qui affiche en direct les températures du PC (processeur et cœurs, GPU, carte mère, mémoire, SSD), avec des graphiques.
@@ -88,6 +90,7 @@ node --test "tests/web/*.test.mjs"     # ou : npm test
 ## Travailler la page
 
 - `node dev/mock-server.mjs` : sert la page avec des capteurs simulés sur http://localhost:8788 (ni admin, ni .NET). Ajouter `--limited` pour voir le mode sans droits admin.
+- `powershell -File dev/make-icon.ps1` : régénère l'icône de l'exe, le logo de la page et celui du README à partir de `branding/Thermonitor_logo.png`. L'icône utilise le robot et son pouce en grand, et la tête seule en 16–32 px pour rester lisible.
 - `node dev/screenshots.mjs [url]` : refait les captures de ce README (Chrome headless, sans dépendance) à partir d'un Thermonitor lancé, ou du serveur simulé.
 - Avec le vrai serveur : `$env:THERMONITOR_WWW = "$PWD\src\Thermonitor\wwwroot"` puis `dotnet run --project src/Thermonitor -- --no-elevate`. La page est relue depuis le disque à chaque rechargement. `--no-elevate` est nécessaire : la copie lancée en admin par l'UAC ne reçoit pas la variable d'environnement.
 

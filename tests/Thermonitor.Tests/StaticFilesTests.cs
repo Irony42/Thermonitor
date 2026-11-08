@@ -12,7 +12,7 @@ public partial class StaticFilesTests
     public void The_whole_page_is_embedded()
     {
         Assert.Superset(
-            new HashSet<string> { "/index.html", "/app.css", "/js/app.js", "/js/charts.js", "/js/domain.js", "/js/store.js" },
+            new HashSet<string> { "/index.html", "/app.css", "/js/app.js", "/js/charts.js", "/js/domain.js", "/js/feed.js", "/js/store.js", "/img/mark.png" },
             Files.Paths.ToHashSet());
     }
 
@@ -37,6 +37,7 @@ public partial class StaticFilesTests
     [InlineData("/a.css", "text/css; charset=utf-8")]
     [InlineData("/a.js", "text/javascript; charset=utf-8")]
     [InlineData("/a.svg", "image/svg+xml")]
+    [InlineData("/img/mark.png", "image/png")]
     [InlineData("/a.bin", "application/octet-stream")]
     public void Content_type_follows_the_extension(string path, string expected) =>
         Assert.Equal(expected, StaticFiles.ContentType(path));

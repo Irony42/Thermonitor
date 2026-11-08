@@ -13,6 +13,7 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
   --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --brand-red: #d42a21;
   --heat: linear-gradient(90deg, #184f95 0%, #3987e5 25%, #1baf7a 43.75%, #eda100 62.5%, #eb6834 81.25%, #e34948 100%);
   --glow: radial-gradient(1200px 500px at 15% -10%, rgba(42, 120, 214, .07), transparent 60%),
           radial-gradient(900px 420px at 95% -5%, rgba(235, 104, 52, .06), transparent 60%);
@@ -32,6 +33,7 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 12px 32px -16px rgba(0, 0, 0, .8);
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
     --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --brand-red: #ff4438;
     --glow: radial-gradient(1200px 520px at 12% -12%, rgba(57, 135, 229, .13), transparent 60%),
             radial-gradient(900px 420px at 96% -8%, rgba(217, 89, 38, .10), transparent 60%);
   }
@@ -50,6 +52,7 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 12px 32px -16px rgba(0, 0, 0, .8);
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
   --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  --brand-red: #ff4438;
   --glow: radial-gradient(1200px 520px at 12% -12%, rgba(57, 135, 229, .13), transparent 60%),
           radial-gradient(900px 420px at 96% -8%, rgba(217, 89, 38, .10), transparent 60%);
 }
@@ -77,12 +80,8 @@ svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor;
   border-bottom: 1px solid var(--ring);
 }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 16px; letter-spacing: -.01em; }
-.brand-mark {
-  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: #fff;
-  background: linear-gradient(135deg, #3987e5, #1baf7a 45%, #eda100 70%, #e34948);
-  box-shadow: 0 4px 14px -4px rgba(235, 104, 52, .6);
-}
-.brand-mark svg { width: 17px; height: 17px; stroke-width: 2.2; }
+.brand-mark { width: 32px; height: 32px; display: block; filter: drop-shadow(0 3px 10px rgba(236, 48, 40, .45)); }
+.brand-accent { color: var(--brand-red); }   /* "THERMO" + red "NITOR", like the logo */
 .live {
   display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px;
   border-radius: 999px; font-size: 12px; color: var(--ink-2);

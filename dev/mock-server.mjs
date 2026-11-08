@@ -10,7 +10,7 @@ const args = process.argv.slice(2);
 const port = +(args.find(a => /^\d+$/.test(a)) || 8788);
 const limited = args.includes('--limited');
 const root = fileURLToPath(new URL('../src/Thermonitor/wwwroot/', import.meta.url));
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png' };
 
 const sensors = [];
 const add = (hw, hwName, hwType, name, base, swing, sub = null) =>
