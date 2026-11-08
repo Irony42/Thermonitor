@@ -1,6 +1,7 @@
 # Builds every image derived from branding/Thermonitor_logo.png:
 #   src/Thermonitor/thermonitor.ico        app icon: "robot + thumb" at 48-256 px, "head" at 16-32 px
-#   src/Thermonitor/wwwroot/img/mark.png   page header logo and favicon ("head", 64 px)
+#   src/Thermonitor/wwwroot/img/logo.png   page header logo ("robot + thumb", 96 px)
+#   src/Thermonitor/wwwroot/img/mark.png   favicon ("head", 64 px)
 #   docs/logo.png                          README header (full logo, 520 px)
 # Run: powershell -NoProfile -ExecutionPolicy Bypass -File dev/make-icon.ps1   (Windows PowerShell 5.1)
 Add-Type -AssemblyName System.Drawing
@@ -102,11 +103,15 @@ foreach ($e in $entries) { $w.Write($e.Bytes) }
 $w.Close()
 "icon : $ico ($((Get-Item $ico).Length) octets)"
 
-# --- page header logo and favicon (shown at 30 px, sharp up to 2x screens)
+# --- page: header logo (robot + thumb, shown at 44 px, sharp on 2x screens) and favicon (head, readable at 16 px)
+$logo = Get-Icon $img $Full 96
+$logoPath = Join-Path $root 'src\Thermonitor\wwwroot\img\logo.png'
+$logo.Save($logoPath, [System.Drawing.Imaging.ImageFormat]::Png); $logo.Dispose()
+"en-tete : $logoPath ($((Get-Item $logoPath).Length) octets)"
 $mark = Get-Icon $img $Head 64
 $markPath = Join-Path $root 'src\Thermonitor\wwwroot\img\mark.png'
 $mark.Save($markPath, [System.Drawing.Imaging.ImageFormat]::Png); $mark.Dispose()
-"page : $markPath ($((Get-Item $markPath).Length) octets)"
+"favicon : $markPath ($((Get-Item $markPath).Length) octets)"
 
 # --- README header
 $readme = Join-Path $root 'docs\logo.png'
