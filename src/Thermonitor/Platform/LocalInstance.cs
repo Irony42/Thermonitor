@@ -21,6 +21,22 @@ internal static class LocalInstance
         }
     }
 
+    /// <summary>Asks the server to stop now (its window closed). False when it could not be reached.</summary>
+    public static async Task<bool> RequestQuitAsync(string baseUrl)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl + "api/quit");
+            req.Headers.Add("X-Thermonitor", "1");
+            using var res = await Http.SendAsync(req);
+            return res.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static async Task<bool> WaitForAsync(string baseUrl, TimeSpan max)
     {
         var deadline = Environment.TickCount64 + (long)max.TotalMilliseconds;

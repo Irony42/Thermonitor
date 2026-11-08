@@ -5,8 +5,7 @@ internal static class Log
 {
     private const long MaxBytes = 1024 * 1024;
     private const int CheckSizeEvery = 200;
-    private static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Thermonitor", "thermonitor.log");
+    private static readonly string FilePath = AppPaths.LogFile;
     private static readonly object Gate = new();
     private static int _writes;
 

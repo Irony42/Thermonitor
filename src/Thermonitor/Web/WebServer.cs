@@ -182,6 +182,11 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
                 case "POST" when path == "/api/elevate":
                     await ElevateAsync(res);
                     break;
+                case "POST" when path == "/api/quit":
+                    // The app window closed: stop now rather than after the idle delay.
+                    await SendAsync(res, 200, "application/json", """{"ok":true}"""u8.ToArray());
+                    _ = Task.Delay(100).ContinueWith(_ => Shutdown("window closed"), TaskScheduler.Default);
+                    break;
                 default:
                     res.StatusCode = 404;   // includes OPTIONS: no CORS preflight is ever approved
                     break;
@@ -293,7 +298,7 @@ internal sealed class WebServer(SensorHub hub, WebServerOptions options)
         }
 
         // The elevated copy waits for the port, this one steps down, the page reconnects by itself.
-        var ok = options.RelaunchElevated("--server --no-browser --takeover" + (options.KeepAlive ? " --keep-alive" : ""));
+        var ok = options.RelaunchElevated("--server --no-window --takeover" + (options.KeepAlive ? " --keep-alive" : ""));
         await SendAsync(res, 200, "application/json", ok ? """{"ok":true}"""u8.ToArray() : """{"ok":false}"""u8.ToArray());
         if (ok) _ = Task.Delay(300).ContinueWith(_ => Shutdown("elevated instance takes over"), TaskScheduler.Default);
     }

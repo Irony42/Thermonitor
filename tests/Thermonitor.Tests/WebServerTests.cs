@@ -293,6 +293,38 @@ public sealed class WebServerTests : IAsyncLifetime
         Assert.Equal(0, calls);
     }
 
+    [Fact]
+    public async Task Closing_the_window_stops_the_server_at_once()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true });
+
+        var res = await other.Http.SendAsync(Action("/api/quit", null));
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        await other.Run.WaitAsync(TimeSpan.FromSeconds(5));   // even with keep-alive
+    }
+
+    [Fact]
+    public async Task Quit_needs_the_custom_header()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true });
+
+        var res = await other.Http.SendAsync(Action("/api/quit", null, withHeader: false));
+
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+        await Task.Delay(400);
+        Assert.False(other.Run.IsCompleted);
+    }
+
+    [Fact]
+    public async Task RequestQuitAsync_is_what_the_window_uses()
+    {
+        await using var other = await OtherServerAsync(o => o with { KeepAlive = true });
+
+        Assert.True(await Thermonitor.Platform.LocalInstance.RequestQuitAsync(other.Http.BaseAddress!.ToString()));
+        await other.Run.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     /// <summary>A second server with its own options (the shared one is keep-alive and never elevates).</summary>
     private static async Task<OtherServer> OtherServerAsync(Func<WebServerOptions, WebServerOptions> configure)
     {
