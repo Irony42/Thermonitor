@@ -12,7 +12,7 @@ public partial class StaticFilesTests
     public void The_whole_page_is_embedded()
     {
         Assert.Superset(
-            new HashSet<string> { "/index.html", "/app.css", "/js/app.js", "/js/charts.js", "/js/domain.js", "/js/feed.js", "/js/store.js", "/img/mark.png" },
+            new HashSet<string> { "/index.html", "/app.css", "/js/app.js", "/js/charts.js", "/js/domain.js", "/js/feed.js", "/js/store.js", "/img/logo.png", "/img/mark.png" },
             Files.Paths.ToHashSet());
     }
 
